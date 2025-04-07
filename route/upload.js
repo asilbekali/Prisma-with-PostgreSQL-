@@ -137,7 +137,7 @@ const multer = require("multer");
 const path = require("path");
 const express = require("express");
 const router = express.Router();
-const { authMiddleware } = require("../middlewares/auth-role.middlewars");
+const { authMiddleware } = require("../middleware/aotuh-role.middleware");
 const logger = require("../logger");
 
 const storage = multer.diskStorage({

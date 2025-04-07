@@ -11,7 +11,7 @@ async function authMiddleware(req, res, next) {
 
     const user = jwt.verify(token, "apex1");
 
-    if (user.status !== "active") {
+    if (user.status !== "Activited") {
       return res.status(401).send({
         message: "You did not verify your account. Please verify it.",
       });
@@ -47,7 +47,7 @@ function roleMiddleware(roles) {
 
       const user = jwt.verify(token, "apex1");
 
-      if (user.status !== "active") {
+      if (user.status !== "Activited") {
         return res.status(401).send({
           message: "You did not verify your account. Please verify it.",
         });
@@ -62,6 +62,8 @@ function roleMiddleware(roles) {
           .status(401)
           .send({ message: "No session detected. Please log in again" });
       }
+      console.log(roles);
+      
       if (roles.includes(user.role)) {
         req.user = user;
         next();

@@ -2,7 +2,7 @@ const winston = require("winston");
 const TelegramBot = require("node-telegram-bot-api");
 
 const TELEGRAM_BOT_TOKEN = "8060982627:AAEBGfcn2336WCClxY3VI8yw7uk_WItyFmI";
-const CHAT_ID = "@winstonlog";
+const CHAT_ID = "@logger_arxive";
 
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
 

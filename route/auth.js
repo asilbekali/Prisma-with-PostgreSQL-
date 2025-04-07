@@ -12,6 +12,20 @@ const prisma = new PrismaClient();
 
 const router = Router();
 
+function genToken(user) {
+    const token = jwt.sign(
+        { id: user.id, role: user.role, status: user.status },
+        "apex1",
+        { expiresIn: "40m" }
+    );
+    return token;
+}
+
+function genRefreshToken(user) {
+    const token = jwt.sign({ id: user.id }, "apex2", { expiresIn: "14d" });
+    return token;
+}
+
 /**
  * @swagger
  * tags:
@@ -44,6 +58,9 @@ const router = Router();
  *               name:
  *                 type: string
  *                 example: John Doe
+ *               role: 
+ *                 type: string
+ *                 example: admin 
  *     responses:
  *       200:
  *         description: OTP sent to the user's email
@@ -60,16 +77,20 @@ const router = Router();
  */
 router.post("/register", async (req, res) => {
     try {
-        const { email, password, phone, name } = req.body;
+        const { email, password, phone, name, role} = req.body;
         const otp = totp.generate(email + "stakan");
         const hash = bcrypt.hashSync(password, 10);
         const newUser = await prisma.user.create({
-            email: email,
-            password: hash,
-            status: "pending",
-            phone: phone,
-            name: name,
+            data: {
+                email: email,
+                password: hash,
+                status: "pending",
+                phone: phone,
+                name: name,
+                role: role
+            },
         });
+
         console.log(otp);
         sendEmail(email, name, otp);
 
@@ -84,7 +105,7 @@ router.post("/register", async (req, res) => {
 
 /**
  * @swagger
- * /login:
+ * /auth/login:
  *   post:
  *     summary: Log in a user
  *     tags: [Auth]
@@ -149,11 +170,15 @@ router.post("/login", async (req, res) => {
 
         logger.log("info", `User logged in - ${user.email}`);
 
-        const device = deviceParser.parse(req.headers["user-agent"]);
-        console.log(device);
+        const device = deviceDetector.parse(req.headers["user-agent"]);
 
         const session = await prisma.session.findUnique({
-            where: { user_id_ip: { user_id: user.id, ip: req.ip } },
+            where: {
+                user_id_ip: {
+                    user_id: user.id,
+                    ip: req.ip,
+                },
+            },
         });
 
         if (!session) {
@@ -176,7 +201,7 @@ router.post("/login", async (req, res) => {
 
 /**
  * @swagger
- * /me:
+ * /auth/me:
  *   get:
  *     summary: Get the authenticated user's information
  *     tags: [Auth]
@@ -191,21 +216,123 @@ router.post("/login", async (req, res) => {
 router.get("/me", authMiddleware, async (req, res) => {
     try {
         const userId = req.user.id;
-        res.send("salom");
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+        });
+
+        if (!user) {
+            return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send(user);
     } catch (error) {
         logger.error("Error retrieving user information:", error);
         res.status(500).send({ message: "Internal server error" });
     }
 });
 
+/**
+ * @swagger
+ * /auth/verify:
+ *   post:
+ *     summary: Verify a user's account using OTP
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: user@example.com
+ *               otp:
+ *                 type: string
+ *                 example: 123456
+ *     responses:
+ *       200:
+ *         description: User verified successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Verified
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: User not found
+ *       400:
+ *         description: OTP is invalid or expired
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Code is not valid or expired
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Something went wrong
+ */
+
+router.post("/verify", async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+
+        const user = await prisma.user.findFirst({
+            where: { email },
+        });
+
+        console.log(user);
+
+        if (!user) {
+            return res.status(404).send({ message: "User not found" });
+        }
+
+        const match = totp.verify({ token: otp, secret: email + "stakan" });
+        if (!match) {
+            return res
+                .status(400)
+                .send({ message: "Code is not valid or expired" });
+        }
+
+        await prisma.user.update({
+            where: { email: email },
+            data: {
+                status: {
+                    set: "Activited",
+                },
+            },
+        });
+
+        logger.log("info", `User verified - ${email}`);
+        res.send({ message: "Verified" });
+    } catch (error) {
+        console.log(error);
+        logger.error("Error to verify user");
+        res.status(500).send({ message: "Something went wrong" });
+    }
+});
+
 module.exports = router;
-
-
-
-
-
-
-
-
 
 // oxriga yetgazib qoyish kerak l=register va logini korib chiqish kerak
